@@ -130,6 +130,32 @@ export class Canvas {
     return (fx: number, fy: number) => mix(c0, c1, Math.max(0, Math.min(1, Math.hypot(fx - cx, fy - cy) / r)));
   }
 
+  // Composite another canvas into this one, scaled to the destination rect (box-sampled).
+  blit(src: Canvas, dx: number, dy: number, dw: number, dh: number) {
+    const s = this.scale;
+    const px0 = Math.max(0, Math.round(dx * s)), py0 = Math.max(0, Math.round(dy * s));
+    const px1 = Math.min(this.w * s, Math.round((dx + dw) * s));
+    const py1 = Math.min(this.h * s, Math.round((dy + dh) * s));
+    for (let py = py0; py < py1; py++) {
+      const fy = (py + 0.5) / s;
+      const sy0 = Math.min(src.h * src.scale, Math.max(0, ((fy - dy) / dh) * src.h * src.scale));
+      for (let px = px0; px < px1; px++) {
+        const fx = (px + 0.5) / s;
+        const sx0 = Math.min(src.w * src.scale, Math.max(0, ((fx - dx) / dw) * src.w * src.scale));
+        // box-sample the source's supersampled buffer around (sx0, sy0)
+        const ss = Math.max(1, Math.round(src.scale * (dw / this.w)));
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let oy = 0; oy < ss; oy++) for (let ox = 0; ox < ss; ox++) {
+          const sx = Math.min(src.w * src.scale - 1, Math.floor(sx0) + ox);
+          const sy = Math.min(src.h * src.scale - 1, Math.floor(sy0) + oy);
+          const i = (sy * src.w * src.scale + sx) * 3;
+          r += src.buf[i]; g += src.buf[i + 1]; b += src.buf[i + 2]; n++;
+        }
+        this.blend(px, py, { r: r / n, g: g / n, b: b / n }, 1);
+      }
+    }
+  }
+
   toPNG(): Buffer {
     const w = this.w, h = this.h, s = this.scale;
     const raw = Buffer.alloc((w * 3 + 1) * h);
